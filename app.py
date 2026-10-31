@@ -632,9 +632,14 @@ if index_button:
         indexed_count = 0
         skipped_count = 0
         failed_files = False
+        total_files = len(uploaded_payloads)
 
-        with st.spinner("Processing files and building vector indexes..."):
-            for payload in uploaded_payloads:
+        # st.status ek expander box banata hai jo live updates dikhata hai
+        with st.status("🚀 Processing files and building vector indexes...", expanded=True) as status_box:
+            for i, payload in enumerate(uploaded_payloads):
+                file_name = payload["name"]
+                status_box.update(label=f"[{i+1}/{total_files}] Processing: {file_name}...")
+                
                 existing_item = next(
                     (item for item in indexed_items if item.get("key") == payload["key"]),
                     None,
@@ -645,36 +650,43 @@ if index_button:
                     continue
 
                 try:
-                    logger.info("Starting indexing for file: %s", payload["name"])
-                    docs = load_file(payload["path"], payload["name"])
+                    logger.info("Starting indexing for file: %s", file_name)
+                    
+                    status_box.update(label=f"[{i+1}/{total_files}] Extracting text from {file_name}...")
+                    docs = load_file(payload["path"], file_name)
                     if not docs:
-                        st.sidebar.error(f"No readable content found in {payload['name']}.")
+                        st.sidebar.error(f"No readable content found in {file_name}.")
                         failed_files = True
                         continue
 
+                    status_box.update(label=f"[{i+1}/{total_files}] Splitting chunks for {file_name}...")
                     chunks = split_code_documents(docs)
+                    
                     collection_name = make_collection_name(
                         payload["key"], user_id=owner_id
                     )
+                    
+                    status_box.update(label=f"[{i+1}/{total_files}] Generating embeddings & saving to Supabase...")
                     create_vector_store(
                         chunks, collection_name=collection_name, replace=True
                     )
+                    
                     previous_file = next(
                         (
                             item for item in indexed_items
                             if item.get("name", "").casefold()
-                            == payload["name"].casefold()
+                            == file_name.casefold()
                         ),
                         None,
                     )
                     chat_id = (
                         previous_file["chat_id"]
                         if previous_file
-                        else store_create_chat(payload["name"])
+                        else store_create_chat(file_name)
                     )
                     item = {
                         "key": payload["key"],
-                        "name": payload["name"],
+                        "name": file_name,
                         "sha256": payload["sha256"],
                         "collection": collection_name,
                         "chat_id": chat_id,
@@ -683,16 +695,22 @@ if index_button:
                     indexed_items = [
                         previous for previous in indexed_items
                         if previous.get("name", "").casefold()
-                        != payload["name"].casefold()
+                        != file_name.casefold()
                     ]
                     indexed_items.append(item)
                     save_index_manifest(manifest_path, indexed_items)
                     activate_indexed_file(item)
                     indexed_count += 1
                 except Exception as error:
-                    st.sidebar.error(f"Indexing failed for {payload['name']}: {error}")
-                    logger.exception("Indexing failed for %s", payload["name"])
+                    st.sidebar.error(f"Indexing failed for {file_name}: {error}")
+                    logger.exception("Indexing failed for %s", file_name)
                     failed_files = True
+
+            # Jab saara kaam mukamal ho jaye
+            if not failed_files:
+                status_box.update(label="✅ All files successfully indexed!", state="complete", expanded=False)
+            else:
+                status_box.update(label="⚠️ Finished with some errors.", state="error", expanded=True)
 
         if indexed_count:
             st.toast(

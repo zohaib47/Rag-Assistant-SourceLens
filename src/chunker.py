@@ -19,12 +19,15 @@ def _get_splitter(file_ext: str, chunk_size: int, chunk_overlap: int):
     """File type ke hisab se splitter: code ko functions/classes par, baqi ko paragraphs par todta hai."""
     language = LANGUAGE_MAP.get(file_ext)
     if language:
+        # Code files ke liye standard size rakhein taake logic intact rahay
         return RecursiveCharacterTextSplitter.from_language(
             language=language, chunk_size=chunk_size, chunk_overlap=chunk_overlap
         )
-    # PDF, JSON, CSS wagera ke liye general text splitter
+    
+    # PDF, Excel, ya baqi documents ke liye chunk_size bara rakhein taake chunks kam banein aur speed fast ho
+    doc_chunk_size = max(chunk_size, 1500)  # Minimum 1500 size for documents
     return RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
+        chunk_size=doc_chunk_size,
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", ". ", " ", ""],
     )

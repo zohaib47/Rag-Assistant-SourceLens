@@ -12,16 +12,18 @@ from langchain_huggingface import HuggingFaceEmbeddings
 load_dotenv()
 
 CONNECTION_STRING = os.getenv("SUPABASE_DB_URL")
-COLLECTION_NAME = "repo_rag_vectors"  # default; purane code ke sath compatible
+COLLECTION_NAME = "repo_repo_rag_vectors"  # default; purane code ke sath compatible
 
 
 @lru_cache(maxsize=1)
 def get_embeddings():
     """
-    Returns local HuggingFace embeddings. Model sirf ek baar load hota hai,
-    har sawal par dobara load nahi hota.
+    Returns local HuggingFace embeddings with optimized batch size for faster inference.
     """
-    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return HuggingFaceEmbeddings(
+        model_name="all-MiniLM-L6-v2",
+        encode_kwargs={"batch_size": 64}  # Speed boost: processes multiple chunks at once
+    )
 
 
 @lru_cache(maxsize=1)
@@ -38,7 +40,6 @@ def get_engine():
 def make_collection_name(source: str, user_id: str = "") -> str:
     """
     Har repo (aur chahein to har user) ke liye alag collection ka naam.
-    Misal: make_collection_name("https://github.com/a/b.git", user_id=session_id)
     """
     slug = re.sub(r"[^a-z0-9]+", "_", source.lower()).strip("_")[-30:]
     digest = hashlib.sha1(f"{user_id}|{source}".encode("utf-8")).hexdigest()[:10]
@@ -48,8 +49,6 @@ def make_collection_name(source: str, user_id: str = "") -> str:
 def create_vector_store(chunks, collection_name: str = COLLECTION_NAME, replace: bool = True):
     """
     Stores chunks in Supabase pgvector.
-    replace=True: isi collection ka purana data hata kar naya index banta hai,
-    taake dobara index karne par duplicates na bane aur purani repo ke jawab na milen.
     """
     embeddings = get_embeddings()
 
@@ -60,6 +59,7 @@ def create_vector_store(chunks, collection_name: str = COLLECTION_NAME, replace:
         collection_name=collection_name,
         use_jsonb=True,
         pre_delete_collection=replace,
+        # batch_size removed because PGVector doesn't take it in __init__
     )
     print(f"Successfully stored {len(chunks)} chunks in Supabase pgvector ({collection_name}).")
     return vector_store

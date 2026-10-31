@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 import streamlit as st
+import streamlit.components.v1 as components
 import src.loader as document_loader
 
 if not hasattr(document_loader, "load_file"):
@@ -85,7 +86,7 @@ header[data-testid="stHeader"] { background: transparent; }
 /* ---------- Brand ---------- */
 .brand { display: flex; align-items: center; gap: 0.75rem; }
 .brand-mark {
-    width: 38px; height: 38px; border-radius: 10px;
+    width: 38px; height: 38px; border-radius: 10px; flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, #4F5BD5, #7C83F0); color: #FFFFFF;
     box-shadow: 0 4px 10px rgba(79, 91, 213, 0.2);
@@ -102,14 +103,20 @@ header[data-testid="stHeader"] { background: transparent; }
 }
 .st-key-navbar [data-testid="stHorizontalBlock"] { align-items: center; }
 .st-key-navbar [data-testid="stBaseButton-primary"] {
-    background: var(--accent); color: #FFFFFF; border: none;
+    background: var(--accent); border: none;
     font-weight: 600; box-shadow: 0 3px 10px rgba(79, 91, 213, 0.25);
 }
 .st-key-navbar [data-testid="stBaseButton-primary"]:hover { background: #4049B8; }
+/* Login button ka text hamesha safed, kisi theme mein background se na mile */
+.st-key-navbar [data-testid="stBaseButton-primary"],
+.st-key-navbar [data-testid="stBaseButton-primary"] * { color: #FFFFFF !important; }
 .st-key-navbar [data-testid="stPopover"] button {
-    background: var(--accent-soft); color: var(--accent);
+    background: var(--accent-soft);
     border: 1px solid rgba(79, 91, 213, 0.28); font-weight: 600;
 }
+.st-key-navbar [data-testid="stPopover"] button,
+.st-key-navbar [data-testid="stPopover"] button * { color: var(--accent) !important; }
+.st-key-navbar button { white-space: nowrap; }
 
 /* ---------- Sidebar ---------- */
 [data-testid="stSidebar"] { background: var(--panel); border-right: 1px solid var(--line); }
@@ -215,15 +222,41 @@ div.hero p { font-size: 0.98rem; color: var(--muted); line-height: 1.6; max-widt
 [data-testid="stChatInput"] textarea { align-self: center !important; padding: 3px 0 !important; line-height: 1.45 !important; }
 [data-testid="stChatInput"]:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79, 91, 213, 0.12); }
 
+.st-key-mobile-upload-cta { display: none; }
 @media (max-width: 640px) {
     .block-container { padding: 1rem 1rem 5.5rem !important; }
     .brand-sub { display: none; }
     div.hero h1 { font-size: 1.65rem; line-height: 1.2; }
-    .st-key-navbar [data-testid="stHorizontalBlock"] {
-        flex-direction: row !important; flex-wrap: nowrap !important; gap: 0.5rem !important;
+    .st-key-mobile-upload-cta {
+        display: block !important;
+        margin-bottom: 0.65rem;
+        padding-top: 2.5rem;
     }
-    .st-key-navbar [data-testid="stHorizontalBlock"] > [data-testid="column"] {
-        width: auto !important; min-width: 0 !important;
+
+    /* Navbar mobile par bhi ek row mein: brand left, Log in right.
+       Selector test id par nahi, seedhay child div par hai, taake har Streamlit version par chale. */
+    .st-key-navbar { padding: 0.5rem 0.7rem; }
+    .st-key-navbar [data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+    }
+    .st-key-navbar [data-testid="stHorizontalBlock"] > div {
+        width: auto !important;
+        min-width: 0 !important;
+        flex: 0 0 auto !important;
+    }
+    .st-key-navbar [data-testid="stHorizontalBlock"] > div:first-child {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+    }
+    .st-key-navbar .brand { gap: 0.55rem; }
+    .st-key-navbar .brand-name { font-size: 0.98rem; }
+    .st-key-navbar button {
+        min-height: 2.3rem !important;
+        padding: 0.3rem 0.8rem !important;
+        font-size: 0.85rem !important;
     }
 }
 </style>
@@ -244,6 +277,7 @@ st.session_state.setdefault("current_chat_id", None)
 st.session_state.setdefault("pending_delete", None)
 st.session_state.setdefault("upload_notice_signature", None)
 st.session_state.setdefault("upload_widget_generation", 0)
+st.session_state.setdefault("upload_sidebar_request", 0)
 
 user = st.session_state["user"]
 owner_id = str(user["id"]) if user else st.session_state["guest_id"]
@@ -434,6 +468,40 @@ def auth_dialog():
                     st.error("Could not create your account. Please try again.")
                 else:
                     complete_login(new_user)
+
+
+with st.container(key="mobile-upload-cta"):
+    if st.button(
+        ":material/upload: Upload files",
+        key="open_mobile_upload",
+        type="primary",
+        use_container_width=True,
+    ):
+        st.session_state["upload_sidebar_request"] += 1
+
+if st.session_state["upload_sidebar_request"]:
+    request_id = st.session_state["upload_sidebar_request"]
+    upload_sidebar_script = """
+        <script>
+        const requestId = 0;
+        const sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+        const expandButton = window.parent.document.querySelector(
+            '[data-testid="stExpandSidebarButton"]'
+        );
+        if (expandButton) expandButton.click();
+        window.setTimeout(() => {
+            const uploader = window.parent.document.querySelector(
+                '[data-testid="stSidebar"] [data-testid="stFileUploader"]'
+            );
+            if (uploader) uploader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, sidebar ? 350 : 700);
+        </script>
+        """.replace("const requestId = 0;", f"const requestId = {request_id};")
+    components.html(
+        upload_sidebar_script,
+        height=1,
+        scrolling=False,
+    )
 
 
 # --- 7. TOASTS ---

@@ -1,4 +1,4 @@
-# 🔭 DocuLens
+# 🔭 SourceLens
 
 > *Peek inside your files and ask them anything.*
 
